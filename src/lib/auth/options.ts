@@ -59,16 +59,37 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.sub ?? ""
+        const userId = token.sub ?? session.user.id
+        session.user.id = userId
         session.user.role = token.role
         session.user.workspaceId = token.workspaceId
+        session.user.workspaceName = token.workspaceName
 
-        if (token.workspaceId) {
-          const workspace = await prisma.workspace.findUnique({
-            where: { id: token.workspaceId },
-            select: { name: true },
-          })
-          session.user.workspaceName = workspace?.name ?? token.workspaceName
+        try {
+          const dbUser = userId
+            ? await prisma.user.findUnique({
+                where: { id: userId },
+                select: {
+                  name: true,
+                  email: true,
+                  role: true,
+                  workspaceId: true,
+                  workspace: {
+                    select: { name: true },
+                  },
+                },
+              })
+            : null
+
+          if (dbUser) {
+            session.user.name = dbUser.name
+            session.user.email = dbUser.email
+            session.user.role = dbUser.role
+            session.user.workspaceId = dbUser.workspaceId
+            session.user.workspaceName = dbUser.workspace.name
+          }
+        } catch (error) {
+          console.error("Failed to load session user from database:", error)
         }
       }
       return session
